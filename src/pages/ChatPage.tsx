@@ -44,6 +44,14 @@ interface ConsultantResponse {
   source: string;
 }
 
+interface ContractFormat {
+  title: string;
+  preamble: string;
+  chapters: Chapter[];
+  closing: string;
+  applicable_standards: string[];
+}
+
 // Test data
 const mockConsultation: ConsultationDetails = {
   id: "1",
@@ -144,6 +152,49 @@ const callAgentAPI = async (query: string): Promise<ConsultantResponse> => {
   }
 };
 
+const callContractorAPI = async (report: any): Promise<ContractFormat> => {
+  try {
+    console.log("Envoi du rapport au contractor:", report);
+    const response = await fetch(
+      "https://multi-agents-coordination.onrender.com/v1/contractor",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(report),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Erreur API contractor - Status:", response.status);
+      console.error("Erreur API contractor - Response:", errorText);
+      throw new Error(
+        `Erreur API contractor (${response.status}): ${errorText}`
+      );
+    }
+
+    const data = await response.json();
+    console.log("Réponse du contractor:", data);
+    return data as ContractFormat;
+  } catch (error) {
+    console.error("Erreur API contractor:", error);
+    throw error;
+  }
+};
+
+// Simuler la réponse du consultant
+const simulateConsultantResponse = (query: string): ConsultantResponse => {
+  return {
+    response: `Voici ma réponse à votre question : "${query}". Je peux vous aider à finaliser cette section.`,
+    title: "Contrat de Financement Islamique",
+    summary: "Analyse approfondie des besoins en financement islamique",
+    source: "Consultant ISDBI",
+  };
+};
+
 export default function ChatPage() {
   const { id } = useParams();
   const [newMessage, setNewMessage] = useState("");
@@ -164,6 +215,9 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [showContract, setShowContract] = useState(true);
+  const [generatedContract, setGeneratedContract] =
+    useState<ContractFormat | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleSendMessage = async () => {
     if (newMessage.trim() && selectedSection) {
@@ -214,16 +268,16 @@ export default function ChatPage() {
 
       setNewMessage("");
 
-      // Appeler l'API de l'agent
       try {
-        const agentResponse = await callAgentAPI(newMessage);
+        // Simuler la réponse du consultant
+        const agentResponse = simulateConsultantResponse(newMessage);
 
         // Mettre à jour les détails de la consultation
         setConsultationDetails((prev) => ({
           ...prev,
-          title: agentResponse.title,
-          summary: agentResponse.summary,
-          source: agentResponse.source,
+          title: agentResponse.title || prev.title,
+          summary: agentResponse.summary || prev.summary,
+          source: agentResponse.source || prev.source,
         }));
 
         const response: Message = {
@@ -270,7 +324,7 @@ export default function ChatPage() {
           return prev;
         });
       } catch (error) {
-        console.error("Erreur lors de l'appel à l'agent:", error);
+        console.error("Erreur lors de la simulation de la réponse:", error);
         const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
           content:
@@ -407,20 +461,99 @@ export default function ChatPage() {
     }
   };
 
-  const generateContractFile = () => {
-    const approvedChapters = chapters.filter((chapter) => chapter.isApproved);
-    const contractContent = approvedChapters
-      .map((chapter) => {
-        const chapterContent = chapter.sections
-          .filter((section) => section.isApproved)
-          .map(
-            (section) =>
-              `${section.title}\n${section.finalContent || section.content}`
-          )
-          .join("\n\n");
-        return `${chapter.title}\n\n${chapterContent}`;
-      })
-      .join("\n\n---\n\n");
+  const generateContract = async () => {
+    try {
+      setIsGenerating(true);
+      // Créer un rapport basé sur la réponse du consultant
+      const report = {
+        contract_type: "Murabaha",
+        contract_purpose: consultationDetails.summary,
+        parties: [
+          {
+            name: "Client",
+            role: "Acheteur",
+            contact_info: {
+              email: "client@example.com",
+              phone: "+1234567890",
+            },
+          },
+        ],
+        contract_details: {
+          asset_description: "Équipement industriel",
+          purchase_price: 100000,
+        },
+        financial_structure: {
+          markup_rate: "5%",
+          payment_terms: "12 mois",
+        },
+        timeline: {
+          start_date: new Date().toISOString(),
+          end_date: new Date(
+            Date.now() + 365 * 24 * 60 * 60 * 1000
+          ).toISOString(),
+        },
+        sharia_compliance_notes: [
+          "Conforme aux principes de la Murabaha",
+          "Respect des standards AAOIFI",
+        ],
+        applicable_standards: {
+          FAS: ["FAS 4", "FAS 28"],
+          Sharia: ["SS 9"],
+        },
+        executive_summary: consultationDetails.summary,
+        chapters: chapters
+          .filter((chapter) => chapter.isApproved)
+          .map((chapter) => ({
+            title: chapter.title,
+            sections: chapter.sections
+              .filter((section) => section.isApproved)
+              .map((section) => ({
+                title: section.title,
+                content: section.finalContent || section.content,
+              })),
+          })),
+      };
+
+      // Appeler l'API du contractor
+      const contractFormat = await callContractorAPI(report);
+      setGeneratedContract(contractFormat);
+    } catch (error) {
+      console.error("Erreur lors de la génération du contrat:", error);
+      alert("Une erreur s'est produite lors de la génération du contrat.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const downloadContract = () => {
+    if (!generatedContract) return;
+
+    const contractContent = `
+${generatedContract.title}
+
+${generatedContract.preamble}
+
+Standards Applicables:
+${generatedContract.applicable_standards.join("\n")}
+
+${generatedContract.chapters
+  .map(
+    (chapter) => `
+${chapter.title}
+${chapter.sections
+  .map(
+    (section) => `
+${section.title}
+${section.content}
+`
+  )
+  .join("\n")}
+`
+  )
+  .join("\n")}
+
+${generatedContract.closing}
+    `;
 
     const blob = new Blob([contractContent], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
@@ -630,7 +763,7 @@ export default function ChatPage() {
         } lg:translate-x-0 fixed lg:static inset-y-0 right-0 z-40 w-80 md:w-96 bg-white dark:bg-gray-900 border-l p-4 md:p-6 flex flex-col shadow-lg transition-transform duration-300 ease-in-out overflow-y-auto`}
       >
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-semibold">Contract Generation</h2>
+          <h2 className="text-lg font-semibold">Génération du Contrat</h2>
           <button
             className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             onClick={() => setShowContract(false)}
@@ -652,43 +785,74 @@ export default function ChatPage() {
             </svg>
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
-          <div className="space-y-4">
-            {chapters
-              .filter((chapter) => chapter.isApproved)
-              .map((chapter) => (
-                <div
-                  key={chapter.id}
-                  className="border p-4 rounded-lg shadow-md bg-gray-50 dark:bg-gray-700"
-                >
-                  <h3 className="text-xl font-bold mb-4">{chapter.title}</h3>
-                  {chapter.sections
-                    .filter((section) => section.isApproved)
-                    .map((section) => (
-                      <div key={section.id} className="mb-4">
-                        <h4 className="text-lg font-semibold mb-2">
-                          {section.title}
-                        </h4>
-                        <p className="whitespace-pre-wrap break-words">
-                          {section.finalContent || section.content}
-                        </p>
-                      </div>
-                    ))}
-                </div>
-              ))}
-          </div>
-        </div>
 
-        {/* Download Contract Button */}
-        {areAllChaptersApproved() && (
-          <div className="mt-6 flex justify-center">
-            <Button
-              onClick={generateContractFile}
-              className="bg-green-500 text-white rounded-full p-3 hover:bg-green-600 transition-colors"
-            >
-              <Download className="h-5 w-5 mr-2" />
-              Download Final Contract
-            </Button>
+        {chapters.every((chapter) => chapter.isApproved) ? (
+          <div className="flex-1 overflow-y-auto p-2">
+            {!generatedContract ? (
+              <div className="flex flex-col items-center justify-center h-full">
+                <Button
+                  onClick={generateContract}
+                  className="bg-blue-500 text-white rounded-full p-3 hover:bg-blue-600 transition-colors"
+                  disabled={isGenerating}
+                >
+                  {isGenerating
+                    ? "Génération en cours..."
+                    : "Générer le Contrat"}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="border p-4 rounded-lg shadow-md bg-gray-50 dark:bg-gray-700">
+                  <h3 className="text-xl font-bold mb-4">
+                    {generatedContract.title}
+                  </h3>
+                  <p className="mb-4">{generatedContract.preamble}</p>
+
+                  <h4 className="font-semibold mb-2">Standards Applicables:</h4>
+                  <ul className="list-disc pl-5 mb-4">
+                    {generatedContract.applicable_standards.map(
+                      (standard, index) => (
+                        <li key={index}>{standard}</li>
+                      )
+                    )}
+                  </ul>
+
+                  {generatedContract.chapters.map((chapter, index) => (
+                    <div key={index} className="mb-4">
+                      <h4 className="text-lg font-semibold mb-2">
+                        {chapter.title}
+                      </h4>
+                      {chapter.sections.map((section, sIndex) => (
+                        <div key={sIndex} className="mb-2">
+                          <h5 className="font-medium">{section.title}</h5>
+                          <p className="whitespace-pre-wrap">
+                            {section.content}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+
+                  <p className="mt-4">{generatedContract.closing}</p>
+                </div>
+
+                <div className="flex justify-center">
+                  <Button
+                    onClick={downloadContract}
+                    className="bg-green-500 text-white rounded-full p-3 hover:bg-green-600 transition-colors"
+                  >
+                    <Download className="h-5 w-5 mr-2" />
+                    Télécharger le Contrat
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-gray-500 dark:text-gray-400 text-center">
+              Veuillez approuver toutes les sections pour générer le contrat
+            </p>
           </div>
         )}
       </div>
