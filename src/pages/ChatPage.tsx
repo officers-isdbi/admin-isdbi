@@ -52,6 +52,10 @@ interface ContractFormat {
   applicable_standards: string[];
 }
 
+interface EditableContract extends ContractFormat {
+  isEditing?: boolean;
+}
+
 // Test data
 const mockConsultation: ConsultationDetails = {
   id: "1",
@@ -62,50 +66,7 @@ const mockConsultation: ConsultationDetails = {
   status: "in_progress",
 };
 
-const mockChapters: Chapter[] = [
-  {
-    id: "1",
-    title: "Introduction",
-    isApproved: false,
-    sections: [
-      {
-        id: "1-1",
-        title: "Contexte",
-        content: "Le contexte de la consultation marketing digital...",
-        isApproved: false,
-        messages: [],
-      },
-      {
-        id: "1-2",
-        title: "Objectifs",
-        content: "Les objectifs principaux de cette consultation...",
-        isApproved: false,
-        messages: [],
-      },
-    ],
-  },
-  {
-    id: "2",
-    title: "Analyse de la Situation Actuelle",
-    isApproved: false,
-    sections: [
-      {
-        id: "2-1",
-        title: "Analyse SWOT",
-        content: "Forces, faiblesses, opportunités et menaces...",
-        isApproved: false,
-        messages: [],
-      },
-      {
-        id: "2-2",
-        title: "Analyse Concurrentielle",
-        content: "Étude des concurrents directs et indirects...",
-        isApproved: false,
-        messages: [],
-      },
-    ],
-  },
-];
+const mockChapters: Chapter[] = [];
 
 const mockMessages: Message[] = [
   {
@@ -200,23 +161,20 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState("");
   const [consultationDetails, setConsultationDetails] =
     useState<ConsultationDetails>(mockConsultation);
-  const [chapters, setChapters] = useState<Chapter[]>(
-    mockChapters.map((chapter) => ({
-      ...chapter,
-      sections: chapter.sections.map((section) => ({
-        ...section,
-        messages: [],
-      })),
-    }))
-  );
+  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [showContract, setShowContract] = useState(true);
+  const [editingSection, setEditingSection] = useState<{
+    chapterIndex: number;
+    sectionIndex: number;
+  } | null>(null);
+  const [editedContent, setEditedContent] = useState("");
   const [generatedContract, setGeneratedContract] =
-    useState<ContractFormat | null>(null);
+    useState<EditableContract | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleSendMessage = async () => {
@@ -376,25 +334,16 @@ export default function ChatPage() {
   };
 
   const handleSectionSelect = (section: Section) => {
-    // Créer un message initial
+    // Créer un message initial de l'utilisateur uniquement
     const initialMessage: Message = {
       id: Date.now().toString(),
-      content: `Bonjour, je souhaite discuter de la section "${section.title}". Pouvez-vous m'aider à la finaliser ?`,
+      content: `Je souhaite discuter de la section "${section.title}".`,
       sender: "user",
       timestamp: new Date().toISOString(),
       sectionId: section.id,
     };
 
-    // Créer une réponse initiale
-    const initialResponse: Message = {
-      id: (Date.now() + 1).toString(),
-      content: `Bien sûr ! Je suis là pour vous aider avec la section "${section.title}". Voici le contenu actuel :\n\n${section.content}\n\nQue souhaitez-vous modifier ou ajouter ?`,
-      sender: "assistant",
-      timestamp: new Date().toISOString(),
-      sectionId: section.id,
-    };
-
-    // Mettre à jour les messages de la section
+    // Mettre à jour les messages de la section avec uniquement le message de l'utilisateur
     setChapters((prev) =>
       prev.map((chapter) => {
         if (chapter.sections.some((s) => s.id === section.id)) {
@@ -404,7 +353,7 @@ export default function ChatPage() {
               if (s.id === section.id) {
                 return {
                   ...s,
-                  messages: [initialMessage, initialResponse],
+                  messages: [initialMessage],
                 };
               }
               return s;
@@ -423,13 +372,69 @@ export default function ChatPage() {
     );
   };
 
+  const handleEditSection = (chapterIndex: number, sectionIndex: number) => {
+    if (!generatedContract) return;
+    const section =
+      generatedContract.chapters[chapterIndex].sections[sectionIndex];
+    setEditingSection({ chapterIndex, sectionIndex });
+    setEditedContent(section.content);
+  };
+
+  const handleSaveEdit = () => {
+    if (!generatedContract || !editingSection) return;
+
+    setGeneratedContract((prev) => {
+      if (!prev) return null;
+      const newChapters = [...prev.chapters];
+      newChapters[editingSection.chapterIndex].sections[
+        editingSection.sectionIndex
+      ].content = editedContent;
+      return { ...prev, chapters: newChapters };
+    });
+
+    setEditingSection(null);
+    setEditedContent("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSection(null);
+    setEditedContent("");
+  };
+
   const handleApproveSection = () => {
     if (selectedChapter && selectedSection) {
-      // Trouver la dernière réponse de l'assistant
-      const lastAssistantMessage = selectedSection.messages
-        .filter((msg) => msg.sender === "assistant")
+      // Trouver le dernier message de l'utilisateur
+      const lastUserMessage = selectedSection.messages
+        .filter((msg) => msg.sender === "user")
         .pop();
 
+      // Utiliser le dernier message de l'utilisateur comme contenu mis à jour
+      const updatedContent =
+        lastUserMessage?.content || selectedSection.content;
+
+      // Mettre à jour le contrat généré si disponible
+      if (generatedContract) {
+        setGeneratedContract((prev) => {
+          if (!prev) return null;
+          const newChapters = prev.chapters.map((chapter) => {
+            if (chapter.title === selectedChapter.title) {
+              return {
+                ...chapter,
+                sections: chapter.sections.map((section) => {
+                  if (section.title === selectedSection.title) {
+                    return { ...section, content: updatedContent };
+                  }
+                  return section;
+                }),
+              };
+            }
+            return chapter;
+          });
+          return { ...prev, chapters: newChapters };
+        });
+      }
+
+      // Mettre à jour les chapitres
       setChapters((prev) =>
         prev.map((chapter) => {
           if (chapter.id === selectedChapter.id) {
@@ -438,8 +443,7 @@ export default function ChatPage() {
                 return {
                   ...section,
                   isApproved: true,
-                  finalContent:
-                    lastAssistantMessage?.content || section.content,
+                  finalContent: updatedContent,
                 };
               }
               return section;
@@ -459,6 +463,60 @@ export default function ChatPage() {
         })
       );
     }
+  };
+
+  const handleApproveAll = () => {
+    if (!generatedContract) return;
+
+    // Mettre à jour le contrat généré avec tous les derniers messages des utilisateurs
+    setGeneratedContract((prev) => {
+      if (!prev) return null;
+      const newChapters = prev.chapters.map((chapter) => {
+        const updatedSections = chapter.sections.map((section) => {
+          // Trouver le dernier message de l'utilisateur pour cette section
+          const lastUserMessage = chapters
+            .find((c) => c.title === chapter.title)
+            ?.sections.find((s) => s.title === section.title)
+            ?.messages.filter((msg) => msg.sender === "user")
+            .pop();
+
+          return {
+            ...section,
+            content: lastUserMessage?.content || section.content,
+          };
+        });
+
+        return {
+          ...chapter,
+          sections: updatedSections,
+        };
+      });
+
+      return { ...prev, chapters: newChapters };
+    });
+
+    // Mettre à jour les chapitres
+    setChapters((prev) =>
+      prev.map((chapter) => {
+        const updatedSections = chapter.sections.map((section) => {
+          const lastUserMessage = section.messages
+            .filter((msg) => msg.sender === "user")
+            .pop();
+
+          return {
+            ...section,
+            isApproved: true,
+            finalContent: lastUserMessage?.content || section.content,
+          };
+        });
+
+        return {
+          ...chapter,
+          sections: updatedSections,
+          isApproved: true,
+        };
+      })
+    );
   };
 
   const generateContract = async () => {
@@ -501,22 +559,29 @@ export default function ChatPage() {
           Sharia: ["SS 9"],
         },
         executive_summary: consultationDetails.summary,
-        chapters: chapters
-          .filter((chapter) => chapter.isApproved)
-          .map((chapter) => ({
-            title: chapter.title,
-            sections: chapter.sections
-              .filter((section) => section.isApproved)
-              .map((section) => ({
-                title: section.title,
-                content: section.finalContent || section.content,
-              })),
-          })),
       };
 
       // Appeler l'API du contractor
       const contractFormat = await callContractorAPI(report);
-      setGeneratedContract(contractFormat);
+      setGeneratedContract({ ...contractFormat, isEditing: false });
+
+      // Mettre à jour les chapitres dans la sidebar
+      const newChapters: Chapter[] = contractFormat.chapters.map(
+        (chapter, index) => ({
+          id: (index + 1).toString(),
+          title: chapter.title,
+          isApproved: false,
+          sections: chapter.sections.map((section, sIndex) => ({
+            id: `${index + 1}-${sIndex + 1}`,
+            title: section.title,
+            content: section.content,
+            isApproved: false,
+            messages: [],
+          })),
+        })
+      );
+
+      setChapters(newChapters);
     } catch (error) {
       console.error("Erreur lors de la génération du contrat:", error);
       alert("Une erreur s'est produite lors de la génération du contrat.");
@@ -624,40 +689,57 @@ ${generatedContract.closing}
 
         <Card>
           <CardHeader>
-            <CardTitle>Chapters</CardTitle>
+            <CardTitle>Chapitres</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {chapters.map((chapter) => (
-                <div
-                  key={chapter.id}
-                  className="border rounded-lg p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  onClick={() => handleChapterSelect(chapter)}
-                >
-                  <h3 className="font-semibold mb-2">{chapter.title}</h3>
-                  <div className="space-y-2">
-                    {chapter.sections.map((section) => (
-                      <div
-                        key={section.id}
-                        className="flex items-center justify-between text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSectionSelect(section);
-                        }}
-                      >
-                        <div className="flex items-center space-x-2">
-                          {section.isApproved ? (
-                            <span className="text-green-500">✓</span>
-                          ) : (
-                            <span className="w-4"></span>
-                          )}
-                          <span>{section.title}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+              {chapters.length === 0 ? (
+                <div className="text-center">
+                  <p className="text-gray-500 dark:text-gray-400 mb-4">
+                    Commencez une conversation pour générer les chapitres
+                  </p>
+                  <Button
+                    onClick={generateContract}
+                    className="bg-blue-500 text-white rounded-full p-3 hover:bg-blue-600 transition-colors"
+                    disabled={isGenerating}
+                  >
+                    {isGenerating
+                      ? "Génération en cours..."
+                      : "Générer le Contrat"}
+                  </Button>
                 </div>
-              ))}
+              ) : (
+                chapters.map((chapter) => (
+                  <div
+                    key={chapter.id}
+                    className="border rounded-lg p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    onClick={() => handleChapterSelect(chapter)}
+                  >
+                    <h3 className="font-semibold mb-2">{chapter.title}</h3>
+                    <div className="space-y-2">
+                      {chapter.sections.map((section) => (
+                        <div
+                          key={section.id}
+                          className="flex items-center justify-between text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSectionSelect(section);
+                          }}
+                        >
+                          <div className="flex items-center space-x-2">
+                            {section.isApproved ? (
+                              <span className="text-green-500">✓</span>
+                            ) : (
+                              <span className="w-4"></span>
+                            )}
+                            <span>{section.title}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -764,78 +846,172 @@ ${generatedContract.closing}
       >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-semibold">Génération du Contrat</h2>
-          <button
-            className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            onClick={() => setShowContract(false)}
-            aria-label="Close contract panel"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+          <div className="flex space-x-2">
+            {chapters.length > 0 && !areAllChaptersApproved() && (
+              <Button
+                onClick={handleApproveAll}
+                className="bg-green-500 text-white rounded-full p-2 hover:bg-green-600 transition-colors"
+              >
+                ✓ Approuver tout
+              </Button>
+            )}
+            <button
+              className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              onClick={() => setShowContract(false)}
+              aria-label="Close contract panel"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        {chapters.every((chapter) => chapter.isApproved) ? (
-          <div className="flex-1 overflow-y-auto p-2">
-            {!generatedContract ? (
-              <div className="flex flex-col items-center justify-center h-full">
-                <Button
-                  onClick={generateContract}
-                  className="bg-blue-500 text-white rounded-full p-3 hover:bg-blue-600 transition-colors"
-                  disabled={isGenerating}
-                >
-                  {isGenerating
-                    ? "Génération en cours..."
-                    : "Générer le Contrat"}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="border p-4 rounded-lg shadow-md bg-gray-50 dark:bg-gray-700">
-                  <h3 className="text-xl font-bold mb-4">
+        <div className="flex-1 overflow-y-auto p-2">
+          {!generatedContract ? (
+            <div className="flex flex-col items-center justify-center h-full">
+              <Button
+                onClick={generateContract}
+                className="bg-blue-500 text-white rounded-full p-3 hover:bg-blue-600 transition-colors"
+                disabled={isGenerating}
+              >
+                {isGenerating ? "Génération en cours..." : "Générer le Contrat"}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="border p-4 rounded-lg shadow-md bg-gray-50 dark:bg-gray-700">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold">
                     {generatedContract.title}
                   </h3>
-                  <p className="mb-4">{generatedContract.preamble}</p>
-
-                  <h4 className="font-semibold mb-2">Standards Applicables:</h4>
-                  <ul className="list-disc pl-5 mb-4">
-                    {generatedContract.applicable_standards.map(
-                      (standard, index) => (
-                        <li key={index}>{standard}</li>
+                  <Button
+                    onClick={() =>
+                      setGeneratedContract((prev) =>
+                        prev ? { ...prev, isEditing: !prev.isEditing } : null
                       )
-                    )}
-                  </ul>
+                    }
+                    className="bg-blue-500 text-white rounded-full p-2 hover:bg-blue-600 transition-colors"
+                  >
+                    {generatedContract.isEditing
+                      ? "Terminer l'édition"
+                      : "Modifier le contrat"}
+                  </Button>
+                </div>
 
-                  {generatedContract.chapters.map((chapter, index) => (
-                    <div key={index} className="mb-4">
-                      <h4 className="text-lg font-semibold mb-2">
-                        {chapter.title}
-                      </h4>
-                      {chapter.sections.map((section, sIndex) => (
-                        <div key={sIndex} className="mb-2">
+                <div className="mb-4">
+                  <h4 className="font-semibold mb-2">Préambule</h4>
+                  {generatedContract.isEditing ? (
+                    <textarea
+                      value={generatedContract.preamble}
+                      onChange={(e) =>
+                        setGeneratedContract((prev) =>
+                          prev ? { ...prev, preamble: e.target.value } : null
+                        )
+                      }
+                      className="w-full p-2 border rounded"
+                      rows={3}
+                    />
+                  ) : (
+                    <p>{generatedContract.preamble}</p>
+                  )}
+                </div>
+
+                <h4 className="font-semibold mb-2">Standards Applicables:</h4>
+                <ul className="list-disc pl-5 mb-4">
+                  {generatedContract.applicable_standards.map(
+                    (standard, index) => (
+                      <li key={index}>{standard}</li>
+                    )
+                  )}
+                </ul>
+
+                {generatedContract.chapters.map((chapter, chapterIndex) => (
+                  <div key={chapterIndex} className="mb-4">
+                    <h4 className="text-lg font-semibold mb-2">
+                      {chapter.title}
+                    </h4>
+                    {chapter.sections.map((section, sectionIndex) => (
+                      <div key={sectionIndex} className="mb-2">
+                        <div className="flex justify-between items-center">
                           <h5 className="font-medium">{section.title}</h5>
+                          {generatedContract.isEditing && (
+                            <Button
+                              onClick={() =>
+                                handleEditSection(chapterIndex, sectionIndex)
+                              }
+                              className="bg-blue-500 text-white rounded-full p-2 hover:bg-blue-600 transition-colors"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        {editingSection?.chapterIndex === chapterIndex &&
+                        editingSection?.sectionIndex === sectionIndex ? (
+                          <div className="mt-2">
+                            <textarea
+                              value={editedContent}
+                              onChange={(e) => setEditedContent(e.target.value)}
+                              className="w-full p-2 border rounded"
+                              rows={4}
+                            />
+                            <div className="flex justify-end space-x-2 mt-2">
+                              <Button
+                                onClick={handleSaveEdit}
+                                className="bg-green-500 text-white rounded-full p-2 hover:bg-green-600 transition-colors"
+                              >
+                                <Save className="h-4 w-4 mr-1" />
+                                Sauvegarder
+                              </Button>
+                              <Button
+                                onClick={handleCancelEdit}
+                                className="bg-gray-500 text-white rounded-full p-2 hover:bg-gray-600 transition-colors"
+                              >
+                                Annuler
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
                           <p className="whitespace-pre-wrap">
                             {section.content}
                           </p>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
 
-                  <p className="mt-4">{generatedContract.closing}</p>
+                <div className="mt-4">
+                  <h4 className="font-semibold mb-2">Clôture</h4>
+                  {generatedContract.isEditing ? (
+                    <textarea
+                      value={generatedContract.closing}
+                      onChange={(e) =>
+                        setGeneratedContract((prev) =>
+                          prev ? { ...prev, closing: e.target.value } : null
+                        )
+                      }
+                      className="w-full p-2 border rounded"
+                      rows={3}
+                    />
+                  ) : (
+                    <p>{generatedContract.closing}</p>
+                  )}
                 </div>
+              </div>
 
+              {areAllChaptersApproved() && (
                 <div className="flex justify-center">
                   <Button
                     onClick={downloadContract}
@@ -845,16 +1021,10 @@ ${generatedContract.closing}
                     Télécharger le Contrat
                   </Button>
                 </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-gray-500 dark:text-gray-400 text-center">
-              Veuillez approuver toutes les sections pour générer le contrat
-            </p>
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Mobile Contract Button */}
