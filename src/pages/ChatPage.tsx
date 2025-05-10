@@ -1,4 +1,3 @@
-import { useParams } from 'react-router';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -106,7 +105,7 @@ const mockConsultation: ConsultationDetails = {
 	status: 'in_progress',
 };
 
-const mockChapters: Chapter[] = [];
+/* const mockChapters: Chapter[] = [];
 
 const mockMessages: Message[] = [
 	{
@@ -126,9 +125,9 @@ const mockMessages: Message[] = [
 		sectionId: '1-2',
 	},
 ];
-
+ */
 // Modifier la fonction callAgentAPI
-const callAgentAPI = async (query: string): Promise<ConsultantResponse> => {
+/* const callAgentAPI = async (query: string): Promise<ConsultantResponse> => {
 	try {
 		const response = await fetch(
 			'https://multi-agents-coordination.onrender.com/v1/consultant',
@@ -151,9 +150,9 @@ const callAgentAPI = async (query: string): Promise<ConsultantResponse> => {
 		console.error('Erreur API:', error);
 		throw error;
 	}
-};
+}; */
 
-const callContractorAPI = async (report: any): Promise<ContractFormat> => {
+const callContractorAPI = async (report: unknown): Promise<ContractFormat> => {
 	try {
 		console.log('Envoi du rapport au contractor:', report);
 		const response = await fetch(
@@ -330,7 +329,6 @@ const ContractPDF = ({ contract }: { contract: ContractFormat }) => (
 );
 
 export default function ChatPage() {
-	const { id } = useParams();
 	const [newMessage, setNewMessage] = useState('');
 	const [consultationDetails, setConsultationDetails] =
 		useState<ConsultationDetails>(mockConsultation);
@@ -341,7 +339,6 @@ export default function ChatPage() {
 	const [selectedSection, setSelectedSection] = useState<Section | null>(
 		null
 	);
-	const [isDarkMode, setIsDarkMode] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
 	const [showSidebar, setShowSidebar] = useState(true);
 	const [showContract, setShowContract] = useState(true);
