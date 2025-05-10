@@ -7,7 +7,15 @@
 	"compilerOptions": {
 		"baseUrl": ".",
 		"paths": {
-			"@/*": ["./src/*"]
+			"@/*": ["./src/*"],
+			"@client/*": ["./src/*"],
+			"#client/*": ["./src/components/*"],
+			"$client/*": ["./src/api/*"],
+			"$client": ["./src/api"],
+			"&client/*": ["./src/config/*"],
+			"@common/*": ["./common/*"],
+			"!common/*": ["./common/types/*"],
+			"^common/*": ["./common/validations/*"]
 		}
 	}
 }

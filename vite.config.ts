@@ -8,6 +8,11 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			'@': path.resolve(__dirname, './src'),
+			'@client': path.resolve(__dirname, './src'),
+			'#client': path.resolve(__dirname, './src/components'),
+			$client: path.resolve(__dirname, './src/api'),
+			'&client': path.resolve(__dirname, './src/config'),
+			'@common': path.resolve(__dirname, './common'),
 		},
 	},
 });
