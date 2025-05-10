@@ -3,7 +3,47 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Send, Edit2, Save, Download } from "lucide-react";
+import { Send, Edit2, Save, Download, FileText } from "lucide-react";
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+  PDFViewer,
+  pdf,
+} from "@react-pdf/renderer";
+
+export interface ContractReport {
+  contract_type: string;
+  contract_purpose: string;
+  parties: Array<{
+    name: string;
+    role: string;
+    contact_info: {
+      email: string;
+      phone: string;
+    };
+  }>;
+  contract_details: {
+    asset_description: string;
+    purchase_price: number;
+  };
+  financial_structure: {
+    markup_rate: string;
+    payment_terms: string;
+  };
+  timeline: {
+    start_date: string;
+    end_date: string;
+  };
+  sharia_compliance_notes: string[];
+  applicable_standards: {
+    FAS: string[];
+    Sharia: string[];
+  };
+  executive_summary: string;
+}
 
 interface Message {
   id: string;
@@ -42,6 +82,7 @@ interface ConsultantResponse {
   response: string;
   summary: string;
   source: string;
+  report: ContractReport;
 }
 
 interface ContractFormat {
@@ -148,13 +189,144 @@ const callContractorAPI = async (report: any): Promise<ContractFormat> => {
 
 // Simuler la réponse du consultant
 const simulateConsultantResponse = (query: string): ConsultantResponse => {
+  const defaultReport: ContractReport = {
+    contract_type: "Murabaha",
+    contract_purpose:
+      "Analyse approfondie des besoins en financement islamique",
+    parties: [
+      {
+        name: "Client",
+        role: "Acheteur",
+        contact_info: {
+          email: "client@example.com",
+          phone: "+1234567890",
+        },
+      },
+    ],
+    contract_details: {
+      asset_description: "Équipement industriel",
+      purchase_price: 100000,
+    },
+    financial_structure: {
+      markup_rate: "5%",
+      payment_terms: "12 mois",
+    },
+    timeline: {
+      start_date: new Date().toISOString(),
+      end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    sharia_compliance_notes: [
+      "Conforme aux principes de la Murabaha",
+      "Respect des standards AAOIFI",
+    ],
+    applicable_standards: {
+      FAS: ["FAS 4", "FAS 28"],
+      Sharia: ["SS 9"],
+    },
+    executive_summary:
+      "Analyse approfondie des besoins en financement islamique",
+  };
+
   return {
     response: `Voici ma réponse à votre question : "${query}". Je peux vous aider à finaliser cette section.`,
     title: "Contrat de Financement Islamique",
     summary: "Analyse approfondie des besoins en financement islamique",
     source: "Consultant ISDBI",
+    report: defaultReport,
   };
 };
+
+// Styles pour le PDF (améliorés)
+const styles = StyleSheet.create({
+  page: {
+    padding: 40,
+    backgroundColor: "#ffffff",
+  },
+  title: {
+    fontSize: 32,
+    marginBottom: 32,
+    textAlign: "center",
+    fontWeight: "bold",
+    letterSpacing: 1.2,
+  },
+  section: {
+    marginBottom: 32,
+  },
+  heading: {
+    fontSize: 20,
+    marginBottom: 14,
+    fontWeight: "bold",
+    color: "#1a237e",
+    letterSpacing: 0.5,
+  },
+  subheading: {
+    fontSize: 16,
+    marginBottom: 8,
+    fontWeight: "bold",
+    color: "#3949ab",
+  },
+  text: {
+    fontSize: 13,
+    marginBottom: 12,
+    lineHeight: 1.7,
+    color: "#222",
+  },
+  list: {
+    marginLeft: 24,
+    marginBottom: 8,
+  },
+  listItem: {
+    fontSize: 13,
+    marginBottom: 6,
+    color: "#222",
+  },
+});
+
+// Composant PDF
+const ContractPDF = ({ contract }: { contract: ContractFormat }) => (
+  <Document>
+    <Page size="A4" style={styles.page}>
+      <Text style={styles.title}>{contract.title}</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.heading}>Preamble</Text>
+        <Text style={styles.text}>{contract.preamble}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.heading}>Applicable Standards</Text>
+        <View style={styles.list}>
+          {contract.applicable_standards.map((standard, index) => (
+            <Text key={index} style={styles.listItem}>
+              • {standard}
+            </Text>
+          ))}
+        </View>
+      </View>
+
+      {contract.chapters.map((chapter, chapterIndex) => (
+        <View key={chapterIndex} style={styles.section} break>
+          <Text style={styles.heading}>
+            Chapter {chapterIndex + 1}: {chapter.title}
+          </Text>
+          {chapter.sections.map((section, sectionIndex) => (
+            <View key={sectionIndex} style={styles.section}>
+              <Text style={styles.subheading}>
+                Section {sectionIndex + 1}: {section.title}
+              </Text>
+              <Text style={styles.text}>{section.content}</Text>
+            </View>
+          ))}
+        </View>
+      ))}
+
+      <View style={styles.section}>
+        <Text style={styles.heading}>Closing</Text>
+        <Text style={styles.text}>{contract.closing}</Text>
+      </View>
+    </Page>
+  </Document>
+);
 
 export default function ChatPage() {
   const { id } = useParams();
@@ -246,7 +418,6 @@ export default function ChatPage() {
           sectionId: selectedSection.id,
         };
 
-        // Mettre à jour les messages de la section avec la réponse
         setChapters((prev) =>
           prev.map((chapter) => {
             if (chapter.id === selectedChapter?.id) {
@@ -337,7 +508,7 @@ export default function ChatPage() {
     // Créer un message initial de l'utilisateur uniquement
     const initialMessage: Message = {
       id: Date.now().toString(),
-      content: `Je souhaite discuter de la section "${section.title}".`,
+      content: `I would like to discuss the section "${section.title}".`,
       sender: "user",
       timestamp: new Date().toISOString(),
       sectionId: section.id,
@@ -523,7 +694,7 @@ export default function ChatPage() {
     try {
       setIsGenerating(true);
       // Créer un rapport basé sur la réponse du consultant
-      const report = {
+      const report: ContractReport = {
         contract_type: "Murabaha",
         contract_purpose: consultationDetails.summary,
         parties: [
@@ -628,6 +799,29 @@ ${generatedContract.closing}
     link.click();
   };
 
+  const downloadContractAsPDF = async () => {
+    if (!generatedContract) return;
+
+    try {
+      const blob = await pdf(
+        <ContractPDF contract={generatedContract} />
+      ).toBlob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "contract.pdf";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      alert(
+        `Error generating PDF: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  };
+
   // Vérifier si tous les chapitres sont approuvés
   const areAllChaptersApproved = () => {
     return chapters.every((chapter) => chapter.isApproved);
@@ -689,23 +883,21 @@ ${generatedContract.closing}
 
         <Card>
           <CardHeader>
-            <CardTitle>Chapitres</CardTitle>
+            <CardTitle>Chapters</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {chapters.length === 0 ? (
                 <div className="text-center">
                   <p className="text-gray-500 dark:text-gray-400 mb-4">
-                    Commencez une conversation pour générer les chapitres
+                    Start a conversation to generate chapters
                   </p>
                   <Button
                     onClick={generateContract}
                     className="bg-blue-500 text-white rounded-full p-3 hover:bg-blue-600 transition-colors"
                     disabled={isGenerating}
                   >
-                    {isGenerating
-                      ? "Génération en cours..."
-                      : "Générer le Contrat"}
+                    {isGenerating ? "Generating..." : "Generate Contract"}
                   </Button>
                 </div>
               ) : (
@@ -845,14 +1037,14 @@ ${generatedContract.closing}
         } lg:translate-x-0 fixed lg:static inset-y-0 right-0 z-40 w-80 md:w-96 bg-white dark:bg-gray-900 border-l p-4 md:p-6 flex flex-col shadow-lg transition-transform duration-300 ease-in-out overflow-y-auto`}
       >
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-semibold">Génération du Contrat</h2>
+          <h2 className="text-lg font-semibold">Contract Generation</h2>
           <div className="flex space-x-2">
             {chapters.length > 0 && !areAllChaptersApproved() && (
               <Button
                 onClick={handleApproveAll}
                 className="bg-green-500 text-white rounded-full p-2 hover:bg-green-600 transition-colors"
               >
-                ✓ Approuver tout
+                ✓ Approve All
               </Button>
             )}
             <button
@@ -886,7 +1078,7 @@ ${generatedContract.closing}
                 className="bg-blue-500 text-white rounded-full p-3 hover:bg-blue-600 transition-colors"
                 disabled={isGenerating}
               >
-                {isGenerating ? "Génération en cours..." : "Générer le Contrat"}
+                {isGenerating ? "Generating..." : "Generate Contract"}
               </Button>
             </div>
           ) : (
@@ -905,13 +1097,13 @@ ${generatedContract.closing}
                     className="bg-blue-500 text-white rounded-full p-2 hover:bg-blue-600 transition-colors"
                   >
                     {generatedContract.isEditing
-                      ? "Terminer l'édition"
-                      : "Modifier le contrat"}
+                      ? "Finish Editing"
+                      : "Edit Contract"}
                   </Button>
                 </div>
 
                 <div className="mb-4">
-                  <h4 className="font-semibold mb-2">Préambule</h4>
+                  <h4 className="font-semibold mb-2">Preamble</h4>
                   {generatedContract.isEditing ? (
                     <textarea
                       value={generatedContract.preamble}
@@ -928,7 +1120,7 @@ ${generatedContract.closing}
                   )}
                 </div>
 
-                <h4 className="font-semibold mb-2">Standards Applicables:</h4>
+                <h4 className="font-semibold mb-2">Applicable Standards:</h4>
                 <ul className="list-disc pl-5 mb-4">
                   {generatedContract.applicable_standards.map(
                     (standard, index) => (
@@ -972,13 +1164,13 @@ ${generatedContract.closing}
                                 className="bg-green-500 text-white rounded-full p-2 hover:bg-green-600 transition-colors"
                               >
                                 <Save className="h-4 w-4 mr-1" />
-                                Sauvegarder
+                                Save
                               </Button>
                               <Button
                                 onClick={handleCancelEdit}
                                 className="bg-gray-500 text-white rounded-full p-2 hover:bg-gray-600 transition-colors"
                               >
-                                Annuler
+                                Cancel
                               </Button>
                             </div>
                           </div>
@@ -993,7 +1185,7 @@ ${generatedContract.closing}
                 ))}
 
                 <div className="mt-4">
-                  <h4 className="font-semibold mb-2">Clôture</h4>
+                  <h4 className="font-semibold mb-2">Closing</h4>
                   {generatedContract.isEditing ? (
                     <textarea
                       value={generatedContract.closing}
@@ -1012,13 +1204,20 @@ ${generatedContract.closing}
               </div>
 
               {areAllChaptersApproved() && (
-                <div className="flex justify-center">
+                <div className="flex justify-center space-x-4">
                   <Button
                     onClick={downloadContract}
                     className="bg-green-500 text-white rounded-full p-3 hover:bg-green-600 transition-colors"
                   >
                     <Download className="h-5 w-5 mr-2" />
-                    Télécharger le Contrat
+                    Download TXT
+                  </Button>
+                  <Button
+                    onClick={downloadContractAsPDF}
+                    className="bg-blue-500 text-white rounded-full p-3 hover:bg-blue-600 transition-colors"
+                  >
+                    <FileText className="h-5 w-5 mr-2" />
+                    Download PDF
                   </Button>
                 </div>
               )}
