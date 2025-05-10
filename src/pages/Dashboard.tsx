@@ -243,11 +243,14 @@ export default function DashboardAdmin() {
 		setShowModal(false);
 	};
 
-	const handleViewDetails = (consultation: Consultation) => {
-		if (consultation.status === 'completed') {
-			navigate(`/contract/${consultation.id}`);
-		} else {
+	const handleViewDetails = (
+		consultation: Consultation,
+		action: 'chat' | 'contract'
+	) => {
+		if (action === 'chat') {
 			navigate(`/chat/${consultation.id}`);
+		} else {
+			navigate(`/contract/${consultation.id}`);
 		}
 	};
 
@@ -415,14 +418,23 @@ export default function DashboardAdmin() {
 														className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
 														onClick={() =>
 															handleViewDetails(
-																consultation
+																consultation,
+																'chat'
 															)
 														}
 													>
-														{consultation.status ===
-														'completed'
-															? 'contract'
-															: ' chat'}
+														Chat
+													</button>
+													<button
+														className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+														onClick={() =>
+															handleViewDetails(
+																consultation,
+																'contract'
+															)
+														}
+													>
+														Contract
 													</button>
 													<button
 														className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-red-500"
